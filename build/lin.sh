@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -e
 
+# https://github.com/lovell/sharp-libvips/compare/main...bru02:sharp-libvips:main#diff-15fe4217ccf5f305b4bb5645dadf5970e32ed9d45d0366118a76376f8d0e1eae
+
 # Environment / working directories
 case ${PLATFORM} in
   linux*)
@@ -120,6 +122,8 @@ VERSION_RSVG=2.57.0
 VERSION_AOM=3.7.1
 VERSION_HEIF=1.17.5
 VERSION_CGIF=0.3.2
+# me:
+VERSION_PDFIUM=6150
 
 # Remove patch version component
 without_patch() {
@@ -179,6 +183,8 @@ version_latest "rsvg" "$VERSION_RSVG" "5420"
 version_latest "aom" "$VERSION_AOM" "17628"
 version_latest "heif" "$VERSION_HEIF" "strukturag/libheif"
 version_latest "cgif" "$VERSION_CGIF" "dloebl/cgif"
+# me:
+# version_latest "pdfium" "$VERSION_PDFIUM" "bblanchon/pdfium-binaries"
 if [ "$ALL_AT_VERSION_LATEST" = "false" ]; then exit 1; fi
 
 # Download and build dependencies from source
@@ -443,8 +449,35 @@ CFLAGS="${CFLAGS} -O3" meson setup _build --default-library=static --buildtype=r
   -Dtests=false
 meson install -C _build --tag devel
 
+
+# this is where we'd add pdfium
+mkdir ${DEPS}/pdfium
+# $CURL https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F${VERSION_PDFIUM}/pdfium-$(echo "$PLATFORM" | sed -E 's/musl/-musl/g; s/v[6-8]//g; s/darwin/mac/g').tgz | tar xzC ${TARGET}
+$CURL https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F${VERSION_PDFIUM}/pdfium-linux-x64.tgz | tar xzC ${TARGET}
+cd ${DEPS}/pdfium
+
+mkdir -p ${TARGET}/lib/pkgconfig
+ls -l ${TARGET}/lib/pkgconfig
+cat > ${TARGET}/lib/pkgconfig/pdfium.pc << EOF
+prefix=${TARGET}
+exec_prefix=\${prefix}
+libdir=\${exec_prefix}/lib
+includedir=\${prefix}/include
+Name: pdfium
+Description: pdfium
+Version: ${VERSION_PDFIUM}
+Requires:
+Libs: -L\${libdir} -lpdfium
+Cflags: -I\${includedir}
+EOF
+
+ls -l ${TARGET}/lib/pkgconfig
+
+
 mkdir ${DEPS}/vips
 $CURL https://github.com/libvips/libvips/releases/download/v${VERSION_VIPS}/vips-$(without_prerelease $VERSION_VIPS).tar.xz | tar xJC ${DEPS}/vips --strip-components=1
+pwd
+ls -a
 cd ${DEPS}/vips
 # Link libvips.so.42 statically into libvips-cpp.so.42
 sed -i'.bak' "s/library('vips'/static_&/" libvips/meson.build
@@ -464,11 +497,11 @@ sed -i'.bak' "/subdir('man')/{N;N;N;N;d;}" meson.build
 CFLAGS="${CFLAGS} -O3" CXXFLAGS="${CXXFLAGS} -O3" meson setup _build --default-library=shared --buildtype=release --strip --prefix=${TARGET} ${MESON} \
   -Ddeprecated=false -Dintrospection=disabled -Dmodules=disabled -Dcfitsio=disabled -Dfftw=disabled -Djpeg-xl=disabled \
   ${WITHOUT_HIGHWAY:+-Dhighway=disabled} -Dorc=disabled -Dmagick=disabled -Dmatio=disabled -Dnifti=disabled -Dopenexr=disabled \
-  -Dopenjpeg=disabled -Dopenslide=disabled -Dpdfium=disabled -Dpoppler=disabled -Dquantizr=disabled \
+  -Dopenjpeg=disabled -Dopenslide=disabled -Dpoppler=disabled -Dquantizr=disabled \
   -Dppm=false -Danalyze=false -Dradiance=false \
   ${LINUX:+-Dcpp_link_args="$LDFLAGS -Wl,-Bsymbolic-functions -Wl,--version-script=$DEPS/vips/vips.map $EXCLUDE_LIBS"}
 meson install -C _build --tag runtime,devel
-
+# # -Dopenjpeg=disabled -Dopenslide=disabled -Dpdfium=disabled -Dpoppler=disabled -Dquantizr=disabled \
 # Cleanup
 rm -rf ${TARGET}/lib/{pkgconfig,.libs,*.la,cmake}
 
@@ -539,6 +572,7 @@ printf "{\n\
   \"lcms\": \"${VERSION_LCMS2}\",\n\
   \"mozjpeg\": \"${VERSION_MOZJPEG}\",\n\
   \"pango\": \"${VERSION_PANGO}\",\n\
+  \"pdfium\": \"${VERSION_PDFIUM}\",\n\
   \"pixman\": \"${VERSION_PIXMAN}\",\n\
   \"png\": \"${VERSION_PNG16}\",\n\
   \"proxy-libintl\": \"${VERSION_PROXY_LIBINTL}\",\n\

@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -e
 
+# bash build.sh 8.15.0
+# bash build.sh 8.15.0 linux-x64
+# tar -xzC "npm/linux-x64" -f libvips-8.15.0-linux-x64.tar.gz
+# https://github.com/lovell/sharp-libvips/compare/main...bru02:sharp-libvips:main#diff-15fe4217ccf5f305b4bb5645dadf5970e32ed9d45d0366118a76376f8d0e1eae
+
 if [ $# -lt 1 ]; then
   echo
   echo "Usage: $0 VERSION [PLATFORM]"
@@ -90,20 +95,40 @@ for baseimage in alpine:3.15 amazonlinux:2 debian:bullseye debian:buster; do
   docker pull $baseimage
 done
 
+# --rm Automatically remove the container when it exits
+# -e Set environment variables
+# -v Bind mount a volume
+# set -e option instructs the shell to exit immediately if any command or pipeline returns a non-zero exit status
+# -t tag an image
+
+# https://github.com/lovell/sharp-libvips/compare/main...bru02:sharp-libvips:main#diff-15fe4217ccf5f305b4bb5645dadf5970e32ed9d45d0366118a76376f8d0e1eae
+
+# "include-regex": "(sharp-.+\\.node|libvips-.+\\.dll)",
+
+# populate.sh basically just the same as unzipping prebuilt with tar
+# tar -xzC "npm/linux-x64" -f libvips-8.15.0-linux-x64.tar.gz
+
 # Windows
 for flavour in win32-ia32 win32-x64 win32-arm64v8; do
   if [ $PLATFORM = "all" ] || [ $PLATFORM = $flavour ]; then
     echo "Building $flavour..."
     docker build -t vips-dev-win32 platforms/win32
-    docker run --rm -e "VERSION_VIPS=${VERSION_VIPS}" -e "PLATFORM=${flavour}" -v $PWD:/packaging vips-dev-win32 sh -c "/packaging/build/win.sh"
+    # https://stackoverflow.com/a/64981627
+    # https://stackoverflow.com/questions/35315996/how-do-i-mount-a-docker-volume-while-using-a-windows-host
+    # https://stackoverflow.com/questions/48159422/how-to-actually-bind-mount-a-file-in-docker-for-windows
+    # https://docs.docker.com/desktop/troubleshoot/topics/#path-conversion-on-windows
+    # https://stackoverflow.com/questions/29045140/env-bash-r-no-such-file-or-directory
+    docker run --rm -e "VERSION_VIPS=${VERSION_VIPS}" -e "PLATFORM=${flavour}" -v /$(pwd):/packaging vips-dev-win32 sh -c "//packaging//build//win.sh"
   fi
 done
+
+
 
 # Linux (x64, ARMv6, ARMv7, ARM64v8)
 for flavour in linux-x64 linuxmusl-x64 linux-armv6 linux-armv7 linux-arm64v8 linuxmusl-arm64v8 linux-s390x; do
   if [ $PLATFORM = "all" ] || [ $PLATFORM = $flavour ]; then
     echo "Building $flavour..."
     docker build -t vips-dev-$flavour platforms/$flavour
-    docker run --rm -e "VERSION_VIPS=${VERSION_VIPS}" -e VERSION_LATEST_REQUIRED -v $PWD:/packaging vips-dev-$flavour sh -c "/packaging/build/lin.sh"
+    docker run --rm -e "VERSION_VIPS=${VERSION_VIPS}" -e VERSION_LATEST_REQUIRED -v /$(pwd):/packaging vips-dev-$flavour bash -c "//packaging//build//lin.sh"
   fi
 done
